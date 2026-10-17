@@ -347,29 +347,52 @@ with tab_people:
     if search:
         p = p[p.associate.str.contains(search.strip(), case=False)]
 
-    st.subheader("Output vs speed: each dot is one associate")
-    st.markdown("Right = more tasks per active day. Lower = faster delivery. Bigger dot = more tasks in total. "
-                "**Orange** dots had at least one task reverted. **Click a dot** to open that associate.")
-    clean, err = p[p.errors == 0], p[p.errors > 0]
-    fig = go.Figure()
-    for d, name, color in [(clean, "No errors", METRICS["Tasks completed"]["color"]),
-                           (err, "Had an error", METRICS["Errors"]["color"])]:
-        fig.add_scatter(
-            x=d.tasks_per_active_day, y=d.median_hours, mode="markers", name=name,
-            marker=dict(color=color, size=(d.tasks ** 0.5) * 3 + 6, opacity=0.75,
-                        line=dict(color="white", width=1)),
-            customdata=d[["associate", "main_team", "tasks", "errors", "quality_pct"]],
-            hovertemplate="<b>%{customdata[0]}</b> (%{customdata[1]})<br>%{customdata[2]} tasks, "
-                          "%{x:.1f} per active day<br>median %{y:.0f} h to deliver<br>"
-                          "errors: %{customdata[3]} · quality %{customdata[4]:.1f}%<extra></extra>")
-    fig.update_xaxes(title="Tasks per active day")
-    ticks = {1: "1 h", 4: "4 h", 24: "1 day", 72: "3 days", 168: "1 week", 720: "1 month"}
-    fig.update_yaxes(title="Median time to deliver (log scale)", type="log",
-                     tickvals=list(ticks), ticktext=list(ticks.values()))
-    ev = st.plotly_chart(style(fig, 440), width="stretch", on_select="rerun",
-                         selection_mode="points", key="people_chart")
+    hover = ("<b>%{customdata[0]}</b> (%{customdata[1]})<br>%{customdata[2]} tasks, "
+             "%{customdata[5]:.1f} per active day<br>median %{customdata[6]:.0f} h to deliver<br>"
+             "errors: %{customdata[3]} · quality %{customdata[4]:.1f}%<extra></extra>")
+    hover_cols = ["associate", "main_team", "tasks", "errors", "quality_pct", "tasks_per_active_day",
+                  "median_hours"]
+    events = []
 
-    chosen = ev.selection.points[0]["customdata"][0] if ev and ev.selection.points else None
+    if p.empty:
+        st.info("No associates match. Lower the minimum tasks or clear the search.")
+        st.stop()
+    b1, b2 = st.columns(2)
+    top_n = b1.slider("Associates shown", 1, max(2, min(40, len(p))), min(15, len(p)), key="bars_n")
+    order = b2.radio("Sort by", ["Most output", "Fastest delivery", "Most tasks in total"],
+                     horizontal=True, key="bars_sort")
+    if order == "Most output":
+        top = p.nlargest(top_n, "tasks_per_active_day")
+    elif order == "Fastest delivery":
+        top = p.nsmallest(top_n, "median_hours")
+    else:
+        top = p.nlargest(top_n, "tasks")
+    # Same associates in the same order on both charts, so a row reads straight across.
+    labels = [f"⚠ {a}" if e else a for a, e in zip(top.associate, top.errors)]
+    st.subheader(f"Output vs speed: top {len(top)} associates by {order.lower()}")
+    st.markdown("Each row is one associate, in the same order on both charts. **⚠** marks associates "
+                "with at least one reverted task. **Click a bar** to open that associate.")
+    height = max(300, 26 * len(top) + 60)
+    left, right = st.columns(2)
+    for col, x, name, metric, fmt, key in [
+        (left, "tasks_per_active_day", "Output: tasks per active day", "Tasks completed", ".1f",
+         "bars_output"),
+        (right, "median_hours", "Speed: median hours to deliver (shorter is faster)", "Hours to deliver",
+         ".0f", "bars_speed"),
+    ]:
+        fig = go.Figure(go.Bar(
+            y=labels, x=top[x], orientation="h", marker_color=METRICS[metric]["color"],
+            text=top[x].map(lambda v: f"{v:{fmt}}"), textposition="outside", cliponaxis=False,
+            customdata=top[hover_cols], hovertemplate=hover))
+        fig.update_yaxes(autorange="reversed", title=None, type="category")
+        fig.update_xaxes(title=None, range=[0, top[x].max() * 1.2])
+        with col:
+            st.markdown(f"**{name}**")
+            events.append(st.plotly_chart(style(fig, height), width="stretch", on_select="rerun",
+                                          selection_mode="points", key=key))
+
+    picked = [e.selection.points[0] for e in events if e and e.selection.points]
+    chosen = picked[0]["customdata"][0] if picked else None
     if not chosen and search and len(p) == 1:
         chosen = p.associate.iloc[0]
     if chosen:

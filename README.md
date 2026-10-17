@@ -115,8 +115,8 @@ Built with Streamlit + Plotly and organised in four tabs. Every chart responds t
   * Compare teams by any metric, and choose how many to show.
   * **Click a team** to see its daily trend and its associates.
 * **Associates**
-  * A scatter plot of output against speed, with people who had a revert highlighted.
-  * **Click a dot** (or search an ID) to open that person's profile: daily activity and task list.
+  * Output vs speed as two side-by-side bar charts, one row per associate in the same order on both: tasks per active day, and median time to deliver. Choose how many to show and sort by most output, fastest delivery or most tasks. ⚠ marks people who had a revert.
+  * **Click a bar** (or search an ID) to open that person's profile: daily activity and task list.
 * **Data & definitions**: what each metric means and can't tell you, the data-quality checks and the run log.
 
 Teams, associates and filtered tasks can all be downloaded as CSV.

@@ -17,7 +17,6 @@ This project measures how an engineering team performs, using real public data:
 **No API key or account needed.** A personal token is optional and only raises rate limits.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python run_pipeline.py              # first run: last 30 days, ~75 requests, ~3 minutes
@@ -25,6 +24,9 @@ streamlit run dashboard/app.py      # opens http://localhost:8501
 
 python -m pytest                    # offline tests, no network needed
 ```
+
+These commands work the same in Windows PowerShell and on Mac/Linux. Run them from the
+folder that contains `run_pipeline.py`.
 
 Other options:
 
@@ -35,6 +37,7 @@ python run_pipeline.py --full-refresh   # re-download every day in the window
 LOOKBACK_DAYS=60 python run_pipeline.py # load a longer history
 GITLAB_TOKEN=glpat-... python run_pipeline.py   # optional, higher rate limits
 ```
+On Windows PowerShell, set the variable first: `$env:LOOKBACK_DAYS=60`, then run `python run_pipeline.py`.
 
 ## Why this API
 
@@ -137,15 +140,32 @@ Teams, associates and filtered tasks can all be downloaded as CSV.
 
 ## Use of AI tools
 
-Built with Claude (Claude Code) as a pair programmer. **Replace this section with your own account before submitting.**
+I built this with **Claude** and **Claude Code** as a pair programmer. Most of the code
+was written by the AI; my time went into deciding what to measure, checking the results,
+and making the dashboard readable.
 
-* **Where it helped:**
-  * Scaffolding the client, transforms, SQL, dashboard and the offline tests (a fake HTTP session replays 429s, 5xx errors, bad bodies and paging).
-  * Probing the live API to find how it actually behaves: the two disagreeing rate limiters, `merged_after` support, how revert titles are written.
-* **Where it was corrected or overridden:**
-  * **Data source.** GitHub was the first choice, but its API wasn't reachable from the build sandbox. Docker Hub was reachable but has no people-and-tasks data, so I switched to GitLab, which has both.
-  * **"Time spent".** The plan was to use GitLab's time-tracking field. Checking the data showed it was 0% filled, so the metric was redefined as time to deliver and labelled honestly.
-  * **Quality.** A first draft leaned towards a combined quality score. I kept the components visible instead, and added bug fixes as a team-only signal rather than blaming individuals.
-  * **SQL readability.** The first SQL version computed medians and revert matches with window functions. I asked for simpler SQL, so revert matching moved to Python, `MEDIAN()` was registered, and each file became a single `GROUP BY`. The results were checked identical before and after (5,149 tasks, 16 errors).
-  * **Anonymisation** was added before any per-person view was built, after weighing the fairness of ranking real, named people.
-  * **Rendered screenshots.** Several dashboard fixes came from looking at screenshots, not the code: a confusing log-axis label, "229.0 tasks" in hovers, raw column names, and the unlabelled-tasks bar dwarfing every real team.
+**Where AI helped**
+* Writing the pipeline (API client, retries, paging), the SQL, the dashboard and the tests.
+* Suggesting which metrics can describe team performance from the data GitLab exposes
+  (tasks completed, reverted tasks as errors, quality %, time to deliver).
+
+**Where I directed or changed it**
+* **Output vs speed chart.** The first version was a scatter (dot) chart. It needed you to
+  read two axes at once, which isn't easy for a non-technical reader. I asked for it to be
+  replaced with two side-by-side bar charts (output and speed), with a sort option and a
+  slider for how many associates to show.
+* **Metric definitions.** I reviewed the trade-offs listed above (no invented quality score,
+  bug fixes shown only at team level, "time to deliver" instead of the empty time-tracking
+  field) and kept them because they are fairer and easier to explain.
+
+**What I checked myself**
+* Ran the full pipeline on my own Windows laptop against the live GitLab API.
+* Ran it a second time and confirmed the incremental load: 5 requests instead of ~75.
+* Opened the SQLite database and inspected each layer (raw → staging → `fct_tasks` → marts).
+* Read the data-quality checks: every day matched GitLab's own count, 19.9% of tasks have
+  no team label, time tracking was 0% filled, 252 bot MRs were excluded.
+* Reviewed the dashboard as a reader and changed what was hard to understand.
+
+**Scope note:** the core answer is the Overview tab (tasks and errors per day). The other
+tabs are optional drill-downs on the same tables. They were quick to add with AI help, so
+I kept them, but the pipeline and the metric definitions are where I focused.
